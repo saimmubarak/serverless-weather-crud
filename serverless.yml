@@ -1,0 +1,99 @@
+# "org" ensures this Service is used with the correct Serverless Framework Access Key.
+org: saimserverless
+service: serverless-crud
+plugins:
+  - serverless-offline
+  - serverless-python-requirements
+
+frameworkVersion: '4'
+
+provider:
+  name: aws
+  runtime: python3.11
+  region: eu-north-1
+  environment:
+    TABLE_NAME: users
+  logRetentionInDays: 7
+  iam:
+    role:
+      statements:
+        - Effect: Allow
+          Action:
+            - logs:CreateLogGroup
+            - logs:CreateLogStream
+            - logs:PutLogEvents
+          Resource: arn:aws:logs:*:*:*
+
+        - Effect: Allow
+          Action:
+            - dynamodb:PutItem
+            - dynamodb:GetItem
+            - dynamodb:UpdateItem
+            - dynamodb:DeleteItem
+            - dynamodb:Scan
+            - dynamodb:Query
+          Resource:
+            - arn:aws:dynamodb:${self:provider.region}:*:table/users
+
+        - Effect: Allow
+          Action:
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+                - dynamodb:DeleteItem
+                - dynamodb:Scan
+                - dynamodb:Query
+          Resource:
+                - arn:aws:dynamodb:${self:provider.region}:*:table/weather
+
+        # read_user can invoke get_weather
+        - Effect: Allow
+          Action:
+            - lambda:InvokeFunction
+          Resource:
+            - arn:aws:lambda:eu-north-1:*:function:${self:service}-${sls:stage}-getWeather
+
+#        # get_weather can invoke get_existing_weather
+#        - Effect: Allow
+#          Action:
+#            - lambda:InvokeFunction
+#          Resource:
+#            - arn:aws:lambda:eu-north-1:*:function:${self:service}-${sls:stage}-getExistingWeather
+
+
+functions:
+  createUser:
+    handler: create_user.lambda_handler
+    events:
+      - httpApi:
+          path: /create
+          method: post
+
+  readUser:
+    handler: read_user.lambda_handler
+    events:
+      - httpApi:
+          path: /read
+          method: get
+
+  updateUser:
+    handler: update_user.lambda_handler
+    events:
+      - httpApi:
+          path: /update
+          method: put
+
+  deleteUser:
+    handler: delete_user.lambda_handler
+    events:
+      - httpApi:
+          path: /delete
+          method: delete
+
+  getWeather:
+    handler: get_weather.lambda_handler
+    timeout: 10
+
+#  getExistingWeather:
+#    handler: get_existing_weather.lambda_handler
+#    timeout: 10
