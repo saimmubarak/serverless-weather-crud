@@ -1,56 +1,86 @@
 import boto3
 import json
+import helper_functions as hf
 
-dynamodb = boto3.resource('dynamodb')
-table = dynamodb.Table('users')
+
+#An object created to refer to client and table name
+#Specifies dynamodb usage and the table used (table_name)
+#specifies client that is used for invoke (lambda)
+AwsInfo = hf.AwsResources(None, "users", None)
 
 
 def lambda_handler(event, context):
-    body = json.loads(event["body"])
+
+    # Parse data sent in event according to type of data sent
+    # json data in body
+    # parameters
+    body = hf.parse_data(event, context)
+
+    #extract userid and name from params
     user_id = body.get("id")
     name = body.get("name")
+    # Exclude id and name
+    keys_to_exclude = {'id', 'name'}
 
-    # Using a loop to exclude id and name
-    keys_to_exclude = ['id', 'name']
-    expr_attr_values_pre = {}
+    # Build the expressions
+    expression_attribute_values = {}
+    expression_attribute_names = {}
+    update_parts = []
+
     for key, value in body.items():
         if key not in keys_to_exclude:
-            expr_attr_values_pre[key] = value
+            placeholder_name = f"#{key}"
+            placeholder_value = f":{key}"
 
-    # Adding : infront of every key name
-    q__expr_attr_values = {}
-    for key, value in expr_attr_values_pre.items():
-        q__expr_attr_values[':' + key] = value
+            # Build the parts
+            expression_attribute_names[placeholder_name] = key
+            expression_attribute_values[placeholder_value] = value
+            update_parts.append(f"{placeholder_name} = {placeholder_value}")
 
-    # creating update_expr
-    parts = []
-    for key in expr_attr_values_pre.keys():
-        parts.append(f"{key} = :{key}")
-    q__update_expr = 'SET ' + ', '.join(parts)
+    # Join parts into SET expression
+    update_expression = "SET " + ", ".join(update_parts)
 
-    print("q__expr_attr_values")
-    print(q__expr_attr_values)
+    print("Sending update to DynamoDB...")
 
-    print("q__update_expr")
-    print(q__update_expr)
+    # Key dictionary
+    key = {
+        "id": user_id,
+        "name": name
+    }
 
-    # Create update expression
-    # update_expr = "SET " + ", ".join(f"{k} = :{k}" for k in body.keys())
-    # update_expr = 'SET  email = :email, phone = :phone, blood_type = :blood_type, serial_no = :serial_no'
-    # expr_attr_values = {f":{k}": v for k, v in body.items()}
-    # expr_attr_values = {':blood_type': 'abc-', ':email': 'ooowais2@exaaample.com',':phone': 'oo098765', ':serial_no': 'oo987'}
-
-    response = table.update_item(
-        Key={
-            "id": user_id,
-            "name": name
-        },
-        UpdateExpression=q__update_expr,
-        ExpressionAttributeValues=q__expr_attr_values,
-        ReturnValues="ALL_NEW"
+    # Update database
+    response = hf.update_db(
+        AwsInfo.table,
+        key,
+        update_expression,
+        expression_attribute_names,
+        expression_attribute_values
     )
+
+    print("Update response:", response)
 
     return {
         "statusCode": 200,
         "body": json.dumps({"message": "Update successful", "updated": response.get("Attributes")})
     }
+
+if __name__ == "__main__":
+    # This simulates an API Gateway event sending JSON
+    event = {
+        "headers": {
+            "Content-Type": "application/json"
+        },
+        "body": json.dumps({
+            "id": "1f7acab2-e199-4648-9a59-523d0ebda5b1",
+            "name": "saim",
+            "email": "saim@example.com",
+            "bloodtype": "A",
+            "age":"22"
+        })
+    }
+
+    context = None
+
+    # Call the Lambda handler
+    print(lambda_handler(event, context))
+

@@ -53,12 +53,15 @@ provider:
           Resource:
             - arn:aws:lambda:eu-north-1:*:function:${self:service}-${sls:stage}-getWeather
 
-#        # get_weather can invoke get_existing_weather
-#        - Effect: Allow
-#          Action:
-#            - lambda:InvokeFunction
-#          Resource:
-#            - arn:aws:lambda:eu-north-1:*:function:${self:service}-${sls:stage}-getExistingWeather
+
+        - Effect: Allow
+          Action:
+            - s3:PutObject
+            - s3:GetObject
+          Resource:
+            - arn:aws:s3:::profilepicusers
+            - arn:aws:s3:::profilepicusers/*
+
 
 
 functions:
@@ -89,6 +92,13 @@ functions:
       - httpApi:
           path: /delete
           method: delete
+
+#  openProfilePic:
+#    handler: open_profile_pic.lambda_handler
+#    events:
+#      - httpApi:
+#          path: /pic/get
+#          method: get
 
   getWeather:
     handler: get_weather.lambda_handler
