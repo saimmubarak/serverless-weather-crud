@@ -22,18 +22,8 @@ def lambda_handler(event, context):
     image_url = None
     location = None
 
-    # To Handle both application/json type and form data we must get content type that is in headers{}
-    headers =event.get('headers',{})
-
-    # Convert uppercase letters to lowers case to avoid errors
-    headers_normalized = {}
-    for k, v in headers.items():
-        lower_key = k.lower()
-        headers_normalized[lower_key] = v
-
-    # Content type info is placed in content_type within header that we normalized by converting to lowercase
-    content_type = headers_normalized.get("content-type", "")
-
+    # Function extracts us the content-type from header sent in form-data
+    content_type= hf.get_contenttype_from_form_data(event)
 
     # Deal with the payload according to content_type
     if "application/json" in content_type:
@@ -97,15 +87,11 @@ def lambda_handler(event, context):
                 file_bytes = i.content
                 s3_key = f"users/{user_id}/{filename}"
 
-                #put image in s3
-                AwsInfo.s3.put_object(
-                    Bucket=AwsInfo.s3_bucket,
-                    Key=s3_key,
-                    Body=file_bytes,
-                    ContentType=content_type_part
-                )
+                # Function used for placing image to s3 bucket
+                # The function requires client_name(s3), bucket_name(bucket_name), key(s3_key), contenttype(content_type)
+                hf.put_image_in_s3(AwsInfo.s3,AwsInfo.s3_bucket,s3_key,file_bytes,content_type_part)
 
-
+                # Creating an image url
                 image_url = f"https://{AwsInfo.s3_bucket}.s3.amazonaws.com/{s3_key}"
 
             # Location needs separate handling
@@ -123,21 +109,9 @@ def lambda_handler(event, context):
         }
 
 
-    if not location:
-        return {
-            'statusCode': 400,
-            'body': json.dumps({'message': 'location is required in format postal_code,city'})
-        }
+    # Checks for location and splits location in postal_code and city
+    postal_code,city=hf.check_and_handle_location(body)
 
-    #placing url in body
-    if image_url:
-        item["image_url"] = image_url
-
-
-    # Split location into postal_code and city
-    postal_code, city = location.split(",")
-    postal_code = postal_code.strip()
-    city = city.strip()
 
     # adding id into data
     #item = body.copy()
@@ -164,9 +138,9 @@ if __name__ == "__main__":
             "Content-Type": "application/json"
         },
         "body": json.dumps({
-            "name": "Samar",
-            "email": "samar@example.com",
-            "location": "12345,Lahore"
+            "name": "Abdullah",
+            "email": "Abdullah@example.com",
+            "location": "90019,Los Angeles"
         })
     }
 

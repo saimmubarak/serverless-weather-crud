@@ -16,31 +16,24 @@ def lambda_handler(event, context):
     # parameters
     body = hf.parse_data(event, context)
 
-    #extract userid and name from params
+    # Extract userid and name from params
     user_id = body.get("id")
     name = body.get("name")
-    # Exclude id and name
-    keys_to_exclude = {'id', 'name'}
+
+
 
     # Build the expressions
     expression_attribute_values = {}
     expression_attribute_names = {}
-    update_parts = []
+    parts = []
 
-    for key, value in body.items():
-        if key not in keys_to_exclude:
-            placeholder_name = f"#{key}"
-            placeholder_value = f":{key}"
+    # Exclude id and name
+    keys_to_exclude = {'id', 'name'}
 
-            # Build the parts
-            expression_attribute_names[placeholder_name] = key
-            expression_attribute_values[placeholder_value] = value
-            update_parts.append(f"{placeholder_name} = {placeholder_value}")
-
-    # Join parts into SET expression
-    update_expression = "SET " + ", ".join(update_parts)
-
-    print("Sending update to DynamoDB...")
+    # All the preprocessing required before DataBase Update
+    # Very Important to send this function Dict of data we want to update(cleaned item), list of keys to exclude(basically keys of DB), Empty parts list
+    update_expr, expression_attribute_names, expression_attribute_values = hf.preprocessing_before_update(
+        body, keys_to_exclude, parts, expression_attribute_names, expression_attribute_values)
 
     # Key dictionary
     key = {
@@ -49,15 +42,9 @@ def lambda_handler(event, context):
     }
 
     # Update database
-    response = hf.update_db(
-        AwsInfo.table,
-        key,
-        update_expression,
-        expression_attribute_names,
-        expression_attribute_values
-    )
+    response = hf.update_db(AwsInfo.table, key, update_expr, expression_attribute_names, expression_attribute_values)
 
-    print("Update response:", response)
+
 
     return {
         "statusCode": 200,
@@ -71,11 +58,11 @@ if __name__ == "__main__":
             "Content-Type": "application/json"
         },
         "body": json.dumps({
-            "id": "1f7acab2-e199-4648-9a59-523d0ebda5b1",
-            "name": "saim",
+            "id": "473a072e-80c8-48d7-a598-b16df6ec8568",
+            "name": "fahad",
             "email": "saim@example.com",
-            "bloodtype": "A",
-            "age":"22"
+            "bloodtype": "A=",
+            "age":"21"
         })
     }
 

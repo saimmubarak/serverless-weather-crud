@@ -5,6 +5,8 @@ import visual_crossing_request as vc
 import helper_functions as hf
 
 
+
+
 #An object created to refer to client and table name
 #Specifies dynamodb usage and the table used (table_name)
 #specifies client that is used for invoke (lambda)
@@ -30,46 +32,55 @@ def lambda_handler(event, context):
 
     #initialize variables that will be used in the if statements
     resource = ""
-    db_date_time = ""
-    vc_limit_reached = False
+    time_from_database = ""
+    visualcrossing_limit_reached = False
     is_location_valid = False
     expression_attribute_values = {}
     expression_attribute_names = {}
     parts = []
+    service_available = True
+
+    #used in processing
+    keys_to_exclude = {'postal_code', 'city'}
+
 
     if "Item" not in response:
         # todo if your vc limit is over give user the data currenly available in db. DONE
-        #print("It was not in the database")
+        # Data was not found in the database
 
-        #receive weather data dict from visual_crossing and process it
-        cleaned_item = hf.get_and_handle_data_from_visual_crossing(postal_code, city)
+        # Receive weather data dict from visual_crossing and process it
+        # Visual Crossing fetches weather data against the posta_code and city
+        # The dict received will contain weather_data and some checks attacked to it.
+        weather_data_dict = hf.get_and_handle_data_from_visual_crossing(postal_code, city)
 
+        # Resource is a string that indicates the source of weather data
         resource = "Got Data From Visual Crossing"
 
-        #extracting location_valid boolean from dict
-        is_location_valid = cleaned_item.get("Is_location_valid")
+        # Extracting location_valid boolean from dict
+        is_location_valid = weather_data_dict.get("Is_location_valid")
 
         if is_location_valid:
-            #entered location is valid
+            # Entered location is valid
 
-            # extracting visual_crossing_limit_reached boolean from dict
-            vc_limit_reached = cleaned_item.get("visual_crossing_limit_reached")
+            # Extracting visual_crossing_limit_reached boolean from dict
+            visualcrossing_limit_reached = weather_data_dict.get("visual_crossing_limit_reached")
 
-            if vc_limit_reached:
-                print("Weather Data Not Available")
+            # Visual Crossing was unable to send data and there was no data present in the DB as well
+            if visualcrossing_limit_reached:
+                # No weather data available
+                service_available = False
+                return {
+                    "resource": resource,
+                    "statusCode": 200,
+                    "body": service_available,
+                    "Is_Location_valid": is_location_valid
+                }
 
+            # The database must be now updated with the new data received
+            # All the preprocessing required before DataBase Update
+            # Very Important to send this function Dict of data we want to update(cleaned item), list of keys to exclude(basically keys of DB), Empty parts list
+            update_expr, expression_attribute_names, expression_attribute_values = hf.preprocessing_before_update(weather_data_dict, keys_to_exclude, parts, expression_attribute_names, expression_attribute_values)
 
-            # Updating the weather db
-            for key, value in cleaned_item.items():
-                if key not in ("postal_code", "city"):
-                    attr_name_placeholder = f"#{key}"
-                    expression_attribute_names[attr_name_placeholder] = key
-                    expression_attribute_values[f":{key}"] = value
-                    parts.append(f"{attr_name_placeholder} = :{key}")
-
-            update_expr = "SET " + ", ".join(parts)
-
-            # update database function
             key = {
                 "postal_code": postal_code,
                 "city": city
@@ -82,58 +93,74 @@ def lambda_handler(event, context):
             return {
                 "resource": resource,
                 "statusCode": 200,
-                "body": json.dumps(cleaned_item),
+                "body": json.dumps(weather_data_dict),
                 "Is_Location_valid": is_location_valid,
                 "message": "Your entered location was not valid"
             }
 
     else:
-        # .................
-        print("It was in the database")
+        # Data was found in database
+
+        # Resource is a string that indicates the source of weather data
         resource = "Got Data From DynamoDB"
+
+        # Receive weather data dict from database and process it
+        # Weather data received against the posta_code and city
+        # The dict received will contain weather_data and some checks attacked to it.
         item = response.get("Item")
-        cleaned_item = hf.clean_decimals(item)
+
+        # Converting data to float values
+        weather_data_dict = hf.clean_decimals(item)
 
         is_location_valid = True
 
-        #make a temp value for db data
-        temp_cleaned_item = cleaned_item
 
-        db_date_time = cleaned_item.get("datetimeEpoch_val")
+        # Make a temp value for database data as it will be used...
+        # ...when we get visualcrossing data but there is some...
+        # ...problem in visual crossing data and we need to revert...
+        # ...back to data from database
+        temp_cleaned_item = weather_data_dict
 
-        print("database_time", db_date_time)
+        # Epoch-time of the data received from database
+        time_from_database = weather_data_dict.get("datetimeEpoch_val")
 
-        if db_date_time:
-            # -------------------------------------------------------------------------
-            passed_time = hf.time_difference(db_date_time)
-            # --------------------------------------------------------------------------
+        # If statement prevents an error if the database has no epoch-time
+        # Time data from db wasn't present
+        if time_from_database:
 
-            print("passed_time",passed_time)
+            # Function gives us difference in seconds between time from database and present time
+            passed_time = hf.time_difference(time_from_database)
 
+            # Statement checks is the passed time is more than 6hrs
+            # If data in the database was too old
             if passed_time >= 21600:
-                print("It was in the database but the record was too old")
+                # Data was present in the database but was too old
+                # We will now get fresh data from visual crossing
 
-                # receive weather data dict from visual_crossing and process it
+                # Receive weather data dict from visual_crossing and process it
+                # Visual Crossing fetches weather data against the posta_code and city
+                # The dict received will contain weather_data and some checks attacked to it.
                 visual_crossing_item = hf.get_and_handle_data_from_visual_crossing(postal_code, city)
 
-                # extracting visual_crossing_limit_reached boolean from dict
-                vc_limit_reached = visual_crossing_item.get("visual_crossing_limit_reached")
+                # Extracting visual_crossing_limit_reached boolean from dict
+                # Limit_reached boolean will try to send user the current Database data instead of Visual Crossing data
+                visualcrossing_limit_reached = visual_crossing_item.get("visual_crossing_limit_reached")
 
-                if vc_limit_reached:
+                # Limit_reached boolean will send user the current Database data instead of Visual Crossing data
+                if visualcrossing_limit_reached:
+                    # Database data
                     resource = "Got Data From DynamoDB"
-                    cleaned_item = temp_cleaned_item
+                    weather_data_dict = temp_cleaned_item
                 else:
+                    # Visual crossing data
                     resource = "Got Data From Visual Crossing"
-                    cleaned_item = visual_crossing_item
+                    weather_data_dict = visual_crossing_item
 
-                    for key, value in cleaned_item.items():
-                        if key not in ("postal_code", "city"):
-                            attr_name_placeholder = f"#{key}"
-                            expression_attribute_names[attr_name_placeholder] = key
-                            expression_attribute_values[f":{key}"] = value
-                            parts.append(f"{attr_name_placeholder} = :{key}")
-
-                    update_expr = "SET " + ", ".join(parts)
+                    # The database must be now updated with the new data received
+                    # All the preprocessing required before DataBase Update
+                    # Very Important to send this function Dict of data we want to update(cleaned item), list of keys to exclude(basically keys of DB), Empty parts list
+                    update_expr, expression_attribute_names, expression_attribute_values = hf.preprocessing_before_update(
+                        weather_data_dict, keys_to_exclude, parts, expression_attribute_names, expression_attribute_values)
 
                     # update database function
                     key = {
@@ -145,21 +172,21 @@ def lambda_handler(event, context):
                                             expression_attribute_values)
 
 
-
-    cleaned_item.pop("visual_crossing_limit_reached", None)
+    # Removing limit_reached boolean from payload
+    weather_data_dict.pop("visual_crossing_limit_reached", None)
 
     #cleaned_item = hf.clean_decimals(cleaned_item)
 
     return {
         "resource": resource,
         "statusCode": 200,
-        "body": json.dumps(cleaned_item),
+        "body": json.dumps(weather_data_dict),
         "Is_Location_valid": is_location_valid
     }
 
 if __name__ == "__main__":
     test_event = {
-        "postal_code": "90004",
-        "city": "Los Angeles",
+        "postal_code": "89002",
+        "city": "Argentina",
     }
     print(lambda_handler(test_event, None))

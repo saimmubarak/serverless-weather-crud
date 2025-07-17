@@ -5,16 +5,20 @@ import visual_crossing_request as vc
 import json
 
 
-#get data from visual_crossing and get process it (convert to float value)
+# This function receives weather data from visualcrossing and makes its decimal values float
+# Calls get_weather_data_from_visual_crossing to get weather data
+# Calls clean_decimals to process weather_data
 def get_and_handle_data_from_visual_crossing(postal_code, city):
-    # receive weather data dict from visual_crossing and process it
-    cleaned_item = vc.get_weather_data_from_visual_crossing(postal_code, city)
-    cleaned_item = clean_decimals(cleaned_item)
+    # Receive weather data dict from visual_crossing and process it
+    weather_data = vc.get_weather_data_from_visual_crossing(postal_code, city)
+    weather_data = clean_decimals(weather_data)
 
-    return cleaned_item
+    return weather_data
 
+
+# todo change name DONE///
 # Class definition
-#todo change name DONE///
+# This class makes attributes for boto3 client, dynamodb name, table name, s3 bucket name, s3 bucket client
 class AwsResources:
     def __init__(self, client_name = None, table_name = None, bucket_name = None):
 
@@ -31,14 +35,15 @@ class AwsResources:
 #todo make this method dynamic (work for any table that is given in input) DONE////
 #todo pep8 standards
 
-#functions for simple database calls
+# Functions for simple dynamodb calls
+# These methods are dynamic (work for any table that is given in input)
 
-#1 Put data in database
+# 1 Put data in database
 def put_to_db(table_name, item_dict):
     response = table_name.put_item(Item=item_dict)
     return response
 
-#2 delete from database against id and name
+# 2 delete from database against id and name
 def delete_from_db(table_name, user_id, user_name):
     response = table_name.delete_item(
         Key={
@@ -48,12 +53,12 @@ def delete_from_db(table_name, user_id, user_name):
     )
     return response
 
-#3 read from database against partition key and sort key
+# 3 read from database against partition key and sort key
 def read_from_db(table_name,table_key):
     response = table_name.get_item(Key=table_key)
     return response
 
-#3 update database against partition key and sort key
+# 4 update database against partition key and sort key
 def update_db(table_name, table_key, update_expr, expression_attribute_names, expression_attribute_values):
     response = table_name.update_item(
         Key=table_key,
@@ -63,8 +68,9 @@ def update_db(table_name, table_key, update_expr, expression_attribute_names, ex
         ReturnValues="ALL_NEW")
     return response
 
-#todo change name to awslambda invoke
-#invoke some lambda
+# Todo change name to awslambda invoke DONE///
+# This function invokes a lambda
+# eg we can call this function to invoke Lambda A from within Lambda B
 def aws_lambda_invoke(func_name,invo_type,payload,client):
     # Invoke (get_weather)
     response = client.invoke(
@@ -80,7 +86,7 @@ def aws_lambda_invoke(func_name,invo_type,payload,client):
 
 
 
-#function parse data based on type of data either body or "queryStringParameters"
+# Function parse data based on type of data either body or form-data "queryStringParameters"
 def parse_data(event,context):
     params = event.get("queryStringParameters")
     if params:
@@ -94,8 +100,30 @@ def parse_data(event,context):
         "statusCode": 400
     }
 
+# When updating some database and sending new data to the database...
+# ...the strings keys_to_exclude, expression_attribute_name, expression_attribute_values...
+# ...need to be processed and converted to a form that is acceptable for our update_db function
+def preprocessing_before_update(cleaned_item, keys_to_exclude, parts, expression_attribute_names, expression_attribute_values):
+    # Exclude id and name
+    for key, value in cleaned_item.items():
+        if key not in keys_to_exclude:
+            placeholder_name = f"#{key}"
+            placeholder_value = f":{key}"
+
+            # Build the parts
+            expression_attribute_names[placeholder_name] = key
+            expression_attribute_values[placeholder_value] = value
+            parts.append(f"{placeholder_name} = {placeholder_value}")
+
+    # Join parts into SET expression
+    update_expr = "SET " + ", ".join(parts)
+
+    return update_expr, expression_attribute_names, expression_attribute_values
 
 
+# This is a recursive function that converts objects of Decimal type to Float
+# On the leaves of this recursive function we have the code "return float(obj)"
+# If we dont normalize to float then we will get null values in weather data
 def clean_decimals(obj):
     if isinstance(obj, list):
         return [clean_decimals(i) for i in obj]
@@ -106,6 +134,9 @@ def clean_decimals(obj):
     else:
         return obj
 
+
+# Finds the difference in present time and time-epoch of the weather data stored in our database
+# The time-difference/passed-time will be used to determine weather to use existing data or get new data
 def time_difference(db_date_time):
 
     if not db_date_time:
@@ -123,9 +154,9 @@ def time_difference(db_date_time):
     return passed_time
 
 
-#-----------
-#check if location value received in get request
-#split location input into postal_code and city
+
+# Check if location value received in get request
+# Split location input into postal_code and city
 def check_and_handle_location(body):
     # a check to verify if location was sent in post request otherwise error produced
     location = body.get("location")
@@ -139,8 +170,35 @@ def check_and_handle_location(body):
     postal_code = postal_code.strip()
     city = city.strip()
 
-    return {"postal_code":postal_code,
-            "city":city}
+    return postal_code, city
+
+
+# Contenttype that is placed in headers is needed to process form-data
+# We normalize it by converting to lowercase
+def get_contenttype_from_form_data(event):
+    # To Handle both application/json type and form data we must get content type that is in headers{}
+    headers =event.get('headers',{})
+
+    # Convert uppercase letters to lowers case to avoid errors
+    headers_normalized = {}
+    for k, v in headers.items():
+        lower_key = k.lower()
+        headers_normalized[lower_key] = v
+
+    # Content type info is placed in content_type within header that we normalized by converting to lowercase
+    content_type = headers_normalized.get("content-type", "")
+    return content_type
+
+# Function used for placing image to s3 bucket
+# The function requires client_name(s3), bucket_name(bucket_name), key(s3_key), contenttype(content_type)
+def put_image_in_s3(s3, bucket_name,s3_key, file_bytes, content_type):
+    s3.put_object(
+                    Bucket=bucket_name,
+                    Key=s3_key,
+                    Body=file_bytes,
+                    ContentType=content_type
+                )
+    return 0
 
 
 if __name__ == "__main__":
