@@ -1,10 +1,6 @@
 # get_weather Lambda
 import json
-import boto3
-import visual_crossing_request as vc
-import helper_functions as hf
-
-
+from common import helper_functions as hf
 
 
 #An object created to refer to client and table name
@@ -186,7 +182,7 @@ def lambda_handler(event, context):
 
 if __name__ == "__main__":
     test_event = {
-        "postal_code": "89002",
-        "city": "Argentina",
+        "postal_code": "90010",
+        "city": "Los Angeles",
     }
     print(lambda_handler(test_event, None))

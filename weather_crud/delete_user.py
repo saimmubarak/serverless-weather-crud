@@ -1,6 +1,5 @@
-import boto3
 import json
-import helper_functions as hf
+from common import helper_functions as hf
 
 # An object created to refer to client and table name
 # Specifies dynamodb usage and the table used (table_name)

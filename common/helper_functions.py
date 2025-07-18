@@ -1,7 +1,7 @@
 import time
 from decimal import Decimal
 import boto3
-import visual_crossing_request as vc
+from external_weather import visual_crossing_request as vc
 import json
 
 
@@ -157,9 +157,8 @@ def time_difference(db_date_time):
 
 # Check if location value received in get request
 # Split location input into postal_code and city
-def check_and_handle_location(body):
+def check_and_handle_location(location):
     # a check to verify if location was sent in post request otherwise error produced
-    location = body.get("location")
     if not location:
         return {
             'statusCode': 400,

@@ -1,10 +1,8 @@
-import boto3
 import json
 import uuid
 import base64
 from requests_toolbelt.multipart import decoder
-import helper_functions as hf
-
+from common import helper_functions as hf
 
 # An object created to refer to client and table name
 # Specifies dynamodb usage and the table used (table_name)
@@ -35,12 +33,9 @@ def lambda_handler(event, context):
 
         # Produce an error message if location isn't entered
         location = body.get("location")
-        if not location:
-            return {
-                'statusCode': 400,
-                'body': json.dumps({'message': 'location is required in format postal_code,city'})
-            }
 
+        # Checks for location and splits location in postal_code and city
+        postal_code, city = hf.check_and_handle_location(location)
 
         # Adding id into data
         item = body.copy()
@@ -94,6 +89,9 @@ def lambda_handler(event, context):
                 # Creating an image url
                 image_url = f"https://{AwsInfo.s3_bucket}.s3.amazonaws.com/{s3_key}"
 
+                #add image_url in data
+                item["image_url"] = image_url
+
             # Location needs separate handling
             elif field_name == "location":
                 location = i.text
@@ -110,14 +108,15 @@ def lambda_handler(event, context):
 
 
     # Checks for location and splits location in postal_code and city
-    postal_code,city=hf.check_and_handle_location(body)
+    postal_code, city = hf.check_and_handle_location(location)
 
 
-    # adding id into data
+    # adding id, postal_code, city into data
     #item = body.copy()
     item["id"] = user_id
     item["postal_code"] = postal_code
     item["city"] = city
+
 
     # either application/json or multipart/form-data you have to place data in db
     # put item in DynamoDB
@@ -138,9 +137,9 @@ if __name__ == "__main__":
             "Content-Type": "application/json"
         },
         "body": json.dumps({
-            "name": "Abdullah",
-            "email": "Abdullah@example.com",
-            "location": "90019,Los Angeles"
+            "name": "Rijhu",
+            "email": "Rijhu@example.com",
+            "location": "90020,Los Angeles"
         })
     }
 

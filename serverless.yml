@@ -65,29 +65,32 @@ provider:
 
 
 functions:
+
+
+
   createUser:
-    handler: create_user.lambda_handler
+    handler: weather_crud/create_user.lambda_handler
     events:
       - httpApi:
           path: /create
           method: post
 
   readUser:
-    handler: read_user.lambda_handler
+    handler: weather_crud/read_user.lambda_handler
     events:
       - httpApi:
           path: /read
           method: get
 
   updateUser:
-    handler: update_user.lambda_handler
+    handler: weather_crud/update_user.lambda_handler
     events:
       - httpApi:
           path: /update
           method: put
 
   deleteUser:
-    handler: delete_user.lambda_handler
+    handler: weather_crud/delete_user.lambda_handler
     events:
       - httpApi:
           path: /delete
@@ -101,9 +104,21 @@ functions:
 #          method: get
 
   getWeather:
-    handler: get_weather.lambda_handler
+    handler: weather_crud/get_weather.lambda_handler
     timeout: 10
 
 #  getExistingWeather:
 #    handler: get_existing_weather.lambda_handler
 #    timeout: 10
+
+resources:
+  Resources:
+    UserTable:
+      Type: AWS::DynamoDB::Table
+      properties:
+        TableName: weather
+        AttributeDefinitions:
+            - AttributeName: postal_code
+              AttributeType: S
+        KeySchema:
+          - Attri

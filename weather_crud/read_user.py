@@ -1,8 +1,5 @@
-import boto3
 import json
-import requests
-import helper_functions as hf
-
+from common import helper_functions as hf
 
 # An object created to refer to client and table name
 # Specifies dynamodb usage and the table used (table_name)
@@ -52,6 +49,9 @@ def lambda_handler(event, context):
 
 
 
+    print("postal_code:", postal_code)
+    print("city:", city)
+
     # We will get weather data for the user from either visual_crossing or dynamodb
     # Invoke get_weather() "a lambda that handles getting weather data"
     # Getweather requires a payload with postal_code and city
@@ -63,6 +63,9 @@ def lambda_handler(event, context):
     # The function requires Function_Name, Invocation_Type, Payload, s3 Client
     # The function return a dictionary containing weather data or error message
     weatherdata= hf.aws_lambda_invoke("serverless-crud-dev-getWeather","RequestResponse",payload,AwsInfo.client)
+
+
+    print("weatherdata:", weatherdata)
 
     # In the create-weather lambda that we invoked just now...
     # ...we have a if block what returns a boolean instead of a body...
@@ -156,8 +159,8 @@ if __name__ == "__main__":
 
     event = {
         "queryStringParameters": {
-            "id": "473a072e-80c8-48d7-a598-b16df6ec8568",
-            "name": "fahad"
+            "id": "c115df72-2fe5-44fc-add8-175c97ddaca3",
+            "name": "ayaan"
         }
     }
 
